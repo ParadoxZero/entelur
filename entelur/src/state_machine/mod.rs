@@ -1,26 +1,27 @@
+pub mod create_group;
+pub mod state;
+
 use teloxide::{
-    dispatching::{dialogue::{self, InMemStorage}, UpdateHandler},
+    dispatching::{
+        dialogue::{self, InMemStorage},
+        UpdateHandler,
+    },
+    dptree::endpoint,
     prelude::*,
     types::{InlineKeyboardButton, InlineKeyboardMarkup},
     utils::command::{self, BotCommands},
 };
 
-type MyDialogue = Dialogue<State, InMemStorage<State>>;
+use state::State;
+
+type BotDialogue = Dialogue<State, InMemStorage<State>>;
 type HandlerResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
-
-#[derive(Clone, Default)]
-pub enum State {
-    #[default]
-    Start,
-    ReceiveFullName,
-    ReceiveProductChoice {
-        full_name: String,
-    },
-}
-
 #[derive(BotCommands, Clone)]
-#[command(rename_rule = "lowercase", description = "These commands are supported:")]
+#[command(
+    rename_rule = "lowercase",
+    description = "These commands are supported:"
+)]
 enum Command {
     #[command(description = "display this text.")]
     Help,
@@ -39,34 +40,51 @@ enum Command {
     #[command(description = "Show summary so far")]
     ShowSummary,
     #[command(description = "Show statement for past n months")]
-    ShowStatement{
-        months:u32
-    }
+    ShowStatement { months: u32 },
 }
 
 pub fn schema() -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'static>> {
     use dptree::case;
 
     let command_handler = teloxide::filter_command::<Command, _>()
-    .branch(case![Command::Help]).endpoint(help)
-    .branch(case![Command::Cancel]).endpoint(cancel)
-    .branch(case![Command::CreateGroup]).endpoint(create_group)
-    .branch(case![Command::ModifyGroup]).endpoint(modify_group)
-    .branch(case![Command::AddExpense]).endpoint(add_expense)
-    .branch(case![Command::ShowPending]).endpoint(show_pending)
-    .branch(case![Command::Settle]).endpoint(settle)
-    .branch(case![Command::ShowSummary]).endpoint(show_summary)
-    .branch(case![Command::ShowStatement {months}]).endpoint(show_statement);
+        .branch(
+            case![State::Start]
+                .branch(case![Command::CreateGroup])
+                .endpoint(create_group)
+                .branch(case![Command::ModifyGroup])
+                .endpoint(modify_group)
+                .branch(case![Command::AddExpense])
+                .endpoint(add_expense)
+                .branch(case![Command::ShowPending])
+                .endpoint(show_pending)
+                .branch(case![Command::Settle])
+                .endpoint(settle)
+                .branch(case![Command::ShowSummary])
+                .endpoint(show_summary)
+                .branch(case![Command::ShowStatement { months }])
+                .endpoint(show_statement),
+        )
+        .branch(case![Command::Help])
+        .endpoint(help)
+        .branch(case![Command::Cancel])
+        .endpoint(cancel);
 
-    dialogue::enter::<Update, InMemStorage<State>, State, _>().branch(command_handler)
+    dialogue::enter::<Update, InMemStorage<State>, State, _>()
+        .branch(command_handler)
+        .branch(endpoint(invalid_state))
 }
 
 async fn help(bot: Bot, msg: Message) -> HandlerResult {
-    bot.send_message(msg.chat.id, Command::descriptions().to_string()).await?;
+    bot.send_message(msg.chat.id, Command::descriptions().to_string())
+        .await?;
     Ok(())
 }
 
 async fn cancel(bot: Bot, msg: Message) -> HandlerResult {
+    Ok(())
+}
+
+async fn invalid_state(bot: Bot, msg: Message) -> HandlerResult {
     Ok(())
 }
 
@@ -99,6 +117,7 @@ async fn show_statement(bot: Bot, msg: Message) -> HandlerResult {
 }
 
 /*
+For reference - 
 
 async fn receive_full_name(bot: Bot, dialogue: MyDialogue, msg: Message) -> HandlerResult {
     match msg.text().map(ToOwned::to_owned) {

@@ -1,3 +1,8 @@
+// Temporarily disable some warnings while the basic structure is being built
+#![allow(dead_code)]
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+
 mod model;
 mod state_machine;
 
@@ -8,29 +13,7 @@ use teloxide::{
     utils::command::BotCommands,
 };
 
-type MyDialogue = Dialogue<State, InMemStorage<State>>;
-type HandlerResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
-
-#[derive(Clone, Default)]
-pub enum State {
-    #[default]
-    Start,
-    ReceiveFullName,
-    ReceiveProductChoice {
-        full_name: String,
-    },
-}
-
-#[derive(BotCommands, Clone)]
-#[command(rename_rule = "lowercase", description = "These commands are supported:")]
-enum Command {
-    #[command(description = "display this text.")]
-    Help,
-    #[command(description = "start the purchase procedure.")]
-    Start,
-    #[command(description = "cancel the purchase procedure.")]
-    Cancel,
-}
+use state_machine::state::State;
 
 #[tokio::main]
 async fn main() {
