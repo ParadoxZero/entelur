@@ -1,9 +1,9 @@
-use crate::model::datamodel::{
+use crate::{model::datamodel::{
     DataError, Datamodel, Expense, Group, GroupId, GroupMembership, User, UserId,
-};
+}, DbBackend};
 
 use rusqlite::{Connection, Result};
-use std::path::{Path, PathBuf};
+use std::{path::{Path, PathBuf}, rc::Rc};
 use tokio::sync::RwLock;
 
 pub struct SqliteBackend {

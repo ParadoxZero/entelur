@@ -6,7 +6,7 @@
 mod model;
 mod state_machine;
 
-use std::{fmt, str::FromStr};
+use std::{fmt, rc::Rc, str::FromStr, sync::Arc};
 
 use clap::Parser;
 use teloxide::{
@@ -19,6 +19,8 @@ use teloxide::{
 use state_machine::state::State;
 use model::sqlite::backend::SqliteBackend;
 use model::sqlite::migrations;
+
+use crate::model::datamodel::{self, Datamodel};
 
 #[derive(Debug, Clone, Copy)]
 enum DbBackend {
@@ -73,8 +75,9 @@ async fn main() {
 
     backend.migrate_database().await.expect("Failed to migrate database");
 
+    let datamodel = Arc::new(backend);
     Dispatcher::builder(bot, state_machine::schema())
-        .dependencies(dptree::deps![InMemStorage::<State>::new()])
+        .dependencies(dptree::deps![InMemStorage::<State>::new(),datamodel])
         .enable_ctrlc_handler()
         .build()
         .dispatch()
