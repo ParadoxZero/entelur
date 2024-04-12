@@ -24,6 +24,7 @@ pub struct GroupMembership {
 
 #[derive(Debug, Clone)]
 pub struct Expense {
+    pub id: Option<u32>,
     pub added_by: UserId,
     pub group: GroupId,
     pub amount: u32,
@@ -89,6 +90,7 @@ impl Expense {
         description: String,
     ) -> Expense {
         Expense {
+            id: Option::None,
             added_by,
             group,
             amount,
@@ -118,6 +120,6 @@ pub trait Datamodel {
     async fn delete_user(&self, user_id: UserId) -> Result<(), DataError>;
     async fn delete_expense(&self, expense_id: u32) -> Result<(), DataError>;
 
-    async fn get_membership(&self, user_id: UserId) -> Result<GroupMembership, DataError>;
+    async fn get_membership(&self, user_id: UserId) -> Result<Vec<GroupMembership>, DataError>;
     async fn get_user_expenses(&self, user_id: UserId) -> Result<Vec<Expense>, DataError>;
 }
