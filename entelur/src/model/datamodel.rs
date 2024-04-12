@@ -53,7 +53,26 @@ impl Group {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum DataError {}
+pub enum DataError {
+    UnknownError,
+    DatabaseError,
+    ConnectionError,
+    FromSqlConversionFailure,
+    IntegralValueOutOfRange,
+    Utf8Error,
+    NulError,
+    InvalidParameterName,
+    ExecuteReturnedResults,
+    QueryReturnedNoRows,
+    InvalidColumnIndex,
+    InvalidColumnName,
+    InvalidColumnType,
+    StatementChangedRows,
+    ToSqlConversionFailure,
+    InvalidQuery,
+    MultipleStatement,
+    InvalidParameterCount,
+}
 
 impl GroupMembership {
     pub fn new(user_id: UserId, group_id: GroupId) -> GroupMembership {

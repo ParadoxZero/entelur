@@ -1,3 +1,3 @@
-mod datamodel;
-mod migrations;
-mod sqlite_backend;
+pub mod datamodel;
+pub mod migrations;
+pub mod sqlite;

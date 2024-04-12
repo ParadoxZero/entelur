@@ -17,6 +17,8 @@ use teloxide::{
 };
 
 use state_machine::state::State;
+use model::sqlite::backend::SqliteBackend;
+use model::sqlite::migrations;
 
 #[derive(Debug, Clone, Copy)]
 enum DbBackend {
@@ -45,8 +47,13 @@ struct Cli {
     #[arg(short, long, default_value_t = 5)]
     parallel_readers: u32,
 
+    // Which database backend to use
     #[arg(short, long, value_enum)]
     backend: DbBackend,
+
+    // Connection string to use
+    #[arg(short, long)]
+    connection_string: String,
 }
 
 #[tokio::main]
@@ -56,9 +63,15 @@ async fn main() {
 
     let args = Cli::parse();
     pretty_env_logger::init();
-    log::info!("Starting purchase bot...");
+    log::info!("Starting entelur bot...");
 
     let bot = Bot::from_env();
+
+    log::info!("Migrating Database...");
+    let mut backend = SqliteBackend::new(args.connection_string.into(), args.parallel_readers);
+    log::info!("Migration complete.");
+
+    backend.migrate_database().await.expect("Failed to migrate database");
 
     Dispatcher::builder(bot, state_machine::schema())
         .dependencies(dptree::deps![InMemStorage::<State>::new()])
