@@ -77,7 +77,7 @@ async fn main() {
 
     let datamodel = Arc::new(backend);
     Dispatcher::builder(bot, state_machine::schema())
-        .dependencies(dptree::deps![InMemStorage::<State>::new(),datamodel])
+        .dependencies(dptree::deps![InMemStorage::<State>::new()])
         .enable_ctrlc_handler()
         .build()
         .dispatch()

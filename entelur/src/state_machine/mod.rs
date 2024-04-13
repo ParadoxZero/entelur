@@ -1,5 +1,6 @@
-pub mod create_group;
+pub mod group;
 pub mod state;
+pub mod user;
 
 use teloxide::{
     dispatching::{
@@ -14,6 +15,8 @@ use teloxide::{
 
 use state::State;
 
+use crate::state_machine::user::{user_callback_schema, user_schemas};
+
 type BotDialogue = Dialogue<State, InMemStorage<State>>;
 type HandlerResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
@@ -27,6 +30,8 @@ enum Command {
     Help,
     #[command(description = "cancel the purchase procedure.")]
     Cancel,
+    #[command(description = "Register user")]
+    Register,
     #[command(description = "Create a group")]
     CreateGroup,
     #[command(description = "ModifyGroup")]
@@ -47,31 +52,28 @@ pub fn schema() -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'stat
     use dptree::case;
 
     let command_handler = teloxide::filter_command::<Command, _>()
+        .branch(case![Command::Cancel].endpoint(cancel))
         .branch(
             case![State::Start]
-                .branch(case![Command::CreateGroup])
-                .endpoint(create_group)
-                .branch(case![Command::ModifyGroup])
-                .endpoint(modify_group)
-                .branch(case![Command::AddExpense])
-                .endpoint(add_expense)
-                .branch(case![Command::ShowPending])
-                .endpoint(show_pending)
-                .branch(case![Command::Settle])
-                .endpoint(settle)
-                .branch(case![Command::ShowSummary])
-                .endpoint(show_summary)
-                .branch(case![Command::ShowStatement { months }])
-                .endpoint(show_statement),
+                .branch(case![Command::Register].endpoint(register))
+                .branch(case![Command::CreateGroup].endpoint(create_group))
+                .branch(case![Command::ModifyGroup].endpoint(modify_group))
+                .branch(case![Command::AddExpense].endpoint(add_expense))
+                .branch(case![Command::ShowPending].endpoint(show_pending))
+                .branch(case![Command::Settle].endpoint(settle))
+                .branch(case![Command::ShowSummary].endpoint(show_summary))
+                .branch(case![Command::ShowStatement { months }].endpoint(show_statement)),
         )
-        .branch(case![Command::Help])
-        .endpoint(help)
-        .branch(case![Command::Cancel])
-        .endpoint(cancel);
+        .branch(case![Command::Help].endpoint(help));
 
     dialogue::enter::<Update, InMemStorage<State>, State, _>()
-        .branch(command_handler)
-        .branch(endpoint(invalid_state))
+        .branch(
+            Update::filter_message()
+                .branch(command_handler)
+                .branch(user_schemas())
+                .branch(endpoint(invalid_state)),
+        )
+        .branch(Update::filter_callback_query().branch(user_callback_schema()))
 }
 
 async fn help(bot: Bot, msg: Message) -> HandlerResult {
@@ -80,11 +82,25 @@ async fn help(bot: Bot, msg: Message) -> HandlerResult {
     Ok(())
 }
 
-async fn cancel(bot: Bot, msg: Message) -> HandlerResult {
+async fn cancel(bot: Bot, msg: Message, dialogue: BotDialogue) -> HandlerResult {
+    dialogue.update(State::Start).await?;
+    bot.send_message(msg.chat.id, "Reset to start").await?;
     Ok(())
 }
 
 async fn invalid_state(bot: Bot, msg: Message) -> HandlerResult {
+    bot.send_message(
+        msg.chat.id,
+        "Invalid input. please try again. Use /cancel to go back to main menu.",
+    )
+    .await?;
+    Ok(())
+}
+
+async fn register(bot: Bot, msg: Message, dialogue: BotDialogue) -> HandlerResult {
+    bot.send_message(msg.chat.id, "Please enter your name.")
+        .await?;
+    dialogue.update(State::RegisterUser).await?;
     Ok(())
 }
 
@@ -117,7 +133,7 @@ async fn show_statement(bot: Bot, msg: Message) -> HandlerResult {
 }
 
 /*
-For reference - 
+For reference -
 
 async fn receive_full_name(bot: Bot, dialogue: MyDialogue, msg: Message) -> HandlerResult {
     match msg.text().map(ToOwned::to_owned) {

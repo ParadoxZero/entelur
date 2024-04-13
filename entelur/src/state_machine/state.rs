@@ -3,6 +3,10 @@ pub enum State {
     #[default]
     Start,
     Cancel,
+    RegisterUser,
+    ConfirmUser {
+        user_name: String
+    },
     CreateGroup,
     RecieveGroupName,
     RecieveUserToAdd,
