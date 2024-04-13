@@ -2,6 +2,12 @@
 name = "entelur"
 version = "0.1.0"
 edition = "2021"
+authors = ["Sidhin S Thomas"]
+description = "Telegram bot for spliting expenses"
+license = "GPL3"
+license-file = "../LICENSE"
+repository = "https://github.com/ParadoxZero/entelur"
+readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

@@ -1,3 +1,19 @@
+/*
+This file is part of Entelur (https://github.com/ParadoxZero/entelur/).
+Copyright (c) 2024 Sidhin S Thomas.
+
+Entelur is free software: you can redistribute it and/or modify it under the terms of the 
+GNU General Public License as published by the Free Software Foundation, either version 3 
+of the License, or (at your option) any later version.
+
+Entelur is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; 
+without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
+See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with Foobar. 
+If not, see <https://www.gnu.org/licenses/>.
+*/
+
 // Temporarily disable some warnings while the basic structure is being built
 #![allow(dead_code)]
 #![allow(unused_imports)]
@@ -16,9 +32,9 @@ use teloxide::{
     utils::command::BotCommands,
 };
 
-use state_machine::state::State;
 use model::sqlite::backend::SqliteBackend;
 use model::sqlite::migrations;
+use state_machine::state::State;
 
 use crate::model::datamodel::{self, Datamodel};
 
@@ -73,10 +89,16 @@ async fn main() {
     let mut backend = SqliteBackend::new(args.connection_string.into(), args.parallel_readers);
     log::info!("Migration complete.");
 
-    backend.migrate_database().await.expect("Failed to migrate database");
+    backend
+        .migrate_database()
+        .await
+        .expect("Failed to migrate database");
 
     Dispatcher::builder(bot, state_machine::schema())
-        .dependencies(dptree::deps![InMemStorage::<State>::new(), Arc::new(backend)])
+        .dependencies(dptree::deps![
+            InMemStorage::<State>::new(),
+            Arc::new(backend)
+        ])
         .enable_ctrlc_handler()
         .build()
         .dispatch()
