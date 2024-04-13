@@ -28,10 +28,11 @@ static C_MIGRATION_LIST: [Migration;1] = [
     Migration {
         version: 1,
         sql_statements: "
-        CREATE TABLE USER(user_id STRING, name STRING, username STRING);
-        CREATE TABLE EXPENSE_GROUP(group_id STRING, name STRING, description STRING, created_by STRING);
+        CREATE TABLE USER(user_id STRING PRIMARY KEY, name STRING, username STRING);
+        CREATE TABLE EXPENSE_GROUP(group_id STRING PRIMARY KEY, name STRING, description STRING, created_by STRING);
         CREATE TABLE GROUP_MEMBERSHIP(user_id STRING, group_id STRING);
-        CREATE TABLE EXPENSE(id INTEGER PRIMARY KEY AUTOINCREMENT,added_by STRING, group_id STRING, amount INTEGER, title STRING, description STRING);
+        CREATE TABLE EXPENSE(id INTEGER PRIMARY KEY AUTOINCREMENT,added_by STRING, group_id STRING, amount INTEGER, title STRING, description STRING, split_type INTEGER);
+        CREATE TABLE USER_EXPENSES(user_id STRING, expense_id INTEGER, split INTEGER);
         "
     }
 ];

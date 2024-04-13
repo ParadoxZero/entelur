@@ -2,24 +2,29 @@
 This file is part of Entelur (https://github.com/ParadoxZero/entelur/).
 Copyright (c) 2024 Sidhin S Thomas.
 
-Entelur is free software: you can redistribute it and/or modify it under the terms of the 
-GNU General Public License as published by the Free Software Foundation, either version 3 
+Entelur is free software: you can redistribute it and/or modify it under the terms of the
+GNU General Public License as published by the Free Software Foundation, either version 3
 of the License, or (at your option) any later version.
 
-Entelur is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; 
-without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
+Entelur is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 See the GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License along with Foobar. 
+You should have received a copy of the GNU General Public License along with Foobar.
 If not, see <https://www.gnu.org/licenses/>.
 */
 
-use crate::{model::datamodel::{
-    DataError, Datamodel, Expense, Group, GroupId, GroupMembership, User, UserId,
-}, DbBackend};
+use crate::{
+    model::datamodel::{
+        DataError, Datamodel, Expense, Group, GroupId, GroupMembership, SplitType, User, UserId
+    },
+    DbBackend,
+};
 
 use rusqlite::{params, Connection, Result};
-use std::{path::{Path, PathBuf}, rc::Rc};
+use std::{
+    path::{Path, PathBuf}, rc::Rc
+};
 use tokio::sync::RwLock;
 
 pub struct SqliteBackend {
@@ -38,14 +43,39 @@ impl SqliteBackend {
     pub fn get_new_connection(&self) -> Result<Connection> {
         Connection::open(self.file_path.clone())
     }
-    
-    async fn ensure_group_exists(&self, connection: &Connection, group_id: u32) -> Result<(), DataError> {
+
+    async fn ensure_group_exists(
+        &self,
+        connection: &Connection,
+        group_id: u32,
+    ) -> Result<(), DataError> {
         let read_lock = self.rw_lock.read().await;
-        connection.query_row("SELECT group_id FROM EXPENSE_GROUP WHERE group_id = ?", [group_id], |row| {
-        Ok(())
-    })?;
+        connection.query_row(
+            "SELECT group_id FROM EXPENSE_GROUP WHERE group_id = ?",
+            [group_id],
+            |row| Ok(()),
+        )?;
         Ok(())
     }
+    
+    fn calculate_split(&self, expense: &Expense, users: &[User]) -> Result<Vec<(String, u32)>, DataError> {
+        let amount = expense.amount;
+        let users_count = users.len() as u32;
+        let split_type: SplitType = SplitType::try_from(expense.split_type)?;
+        let mut split = vec![(String::new(),0); users_count as usize];
+        match split_type {
+            SplitType::Equal => {
+                let final_amount = amount / users_count;
+                for i in 0..users_count {
+                    split[i as usize].0 = users[i as usize].user_id.clone();
+                    split[i as usize].1 = final_amount;
+                }
+            },
+            _ => return Err(DataError::InvalidSplitType),
+        }
+        Ok(split)
+    }
+
 }
 impl Datamodel for SqliteBackend {
     async fn add_user(&self, user: User) -> Result<(), DataError> {
@@ -79,20 +109,32 @@ impl Datamodel for SqliteBackend {
         let write_lock = self.rw_lock.write().await;
         connection.execute(
             "INSERT INTO GroupMembership(user_id, group_id) VALUES (?1, ?2) ",
-            (user_id, group_id)
+            (user_id, group_id),
         )?;
 
         Result::Ok(())
     }
 
     async fn add_expense(&self, expense: Expense) -> std::prelude::v1::Result<(), DataError> {
-        let connection = self.get_new_connection()?;
+        let mut connection = self.get_new_connection()?;
         self.ensure_group_exists(&connection, expense.group).await?;
+        let users = self.get_group_members(expense.group).await?;
+
+        let split = self.calculate_split(&expense, &users)?;
+
         let write_lock = self.rw_lock.write().await;
-        connection.execute(
+        let tx = connection.transaction()?;
+        tx.execute(
             "INSERT INTO Expense(added_by, group, amount, title, description) VALUES (?1, ?2, ?3, ?4, ?5) ",
             (expense.added_by, expense.group, expense.amount, expense.title, expense.description),
         )?;
+        for (user_id, amount) in split {
+            tx.execute(
+                "INSERT INTO UserExpenses(user_id, expense_id, split) VALUES (?1, ?2, ?3) ",
+                (user_id, expense.id, amount),
+            )?;
+        }
+        tx.commit()?;
 
         Result::Ok(())
     }
@@ -100,13 +142,17 @@ impl Datamodel for SqliteBackend {
     async fn get_user(&self, user_id: UserId) -> std::prelude::v1::Result<User, DataError> {
         let read_lock = self.rw_lock.read().await;
         let connection = self.get_new_connection()?;
-        let user = connection.query_row("SELECT user_id, username, name FROM User WHERE user_id = ?", [user_id], |row| {
-            Ok(User {
-                user_id: row.get(0)?,
-                username: row.get(1)?,
-                name: row.get(2)?,
-            })
-        })?;
+        let user = connection.query_row(
+            "SELECT user_id, username, name FROM User WHERE user_id = ?",
+            [user_id],
+            |row| {
+                Ok(User {
+                    user_id: row.get(0)?,
+                    username: row.get(1)?,
+                    name: row.get(2)?,
+                })
+            },
+        )?;
 
         Ok(user)
     }
@@ -114,22 +160,23 @@ impl Datamodel for SqliteBackend {
     async fn get_group(&self, group_id: GroupId) -> std::prelude::v1::Result<Group, DataError> {
         let read_lock = self.rw_lock.read().await;
         let connection = self.get_new_connection()?;
-        let group = connection.query_row("SELECT group_id, name, description, created_by FROM ExpenseGroup WHERE group_id = ?", [group_id], |row| {
-            Ok(Group {
-                group_id: row.get(0)?,
-                name: row.get(1)?,
-                description: row.get(2)?,
-                created_by: row.get(3)?,
-            })
-        })?;
+        let group = connection.query_row(
+            "SELECT group_id, name, description, created_by FROM ExpenseGroup WHERE group_id = ?",
+            [group_id],
+            |row| {
+                Ok(Group {
+                    group_id: row.get(0)?,
+                    name: row.get(1)?,
+                    description: row.get(2)?,
+                    created_by: row.get(3)?,
+                })
+            },
+        )?;
 
         Ok(group)
     }
 
-    async fn get_group_members(
-        &self,
-        group_id: GroupId,
-    ) -> Result<Vec<User>, DataError> {
+    async fn get_group_members(&self, group_id: GroupId) -> Result<Vec<User>, DataError> {
         let read_lock = self.rw_lock.read().await;
         let connection = self.get_new_connection()?;
         let mut members_query = connection.prepare("SELECT user_id, username, name FROM User WHERE user_id IN (SELECT user_id FROM GroupMembership WHERE group_id = ?)")?;
@@ -140,21 +187,18 @@ impl Datamodel for SqliteBackend {
                 name: row.get(2)?,
             })
         })?;
-        let mut members_list:Vec<User> = Vec::new();
+        let mut members_list: Vec<User> = Vec::new();
         for member_encap in members_query_result {
             members_list.push(member_encap?);
         }
         Result::Ok(members_list)
     }
 
-    async fn get_expenses(
-        &self,
-        group_id: GroupId,
-    ) -> Result<Vec<Expense>, DataError> {
+    async fn get_expenses(&self, group_id: GroupId) -> Result<Vec<Expense>, DataError> {
         let read_lock = self.rw_lock.read().await;
         let connection = self.get_new_connection()?;
 
-        let mut expenses_query = connection.prepare("SELECT id, added_by, group, amount, title, description FROM Expense WHERE group = ?")?;
+        let mut expenses_query = connection.prepare("SELECT id, added_by, group, amount, title, description, split_type FROM Expense WHERE group = ?")?;
         let expenses_query_result = expenses_query.query_map([group_id], |row| {
             Ok(Expense {
                 id: row.get(0)?,
@@ -163,9 +207,10 @@ impl Datamodel for SqliteBackend {
                 amount: row.get(3)?,
                 title: row.get(4)?,
                 description: row.get(5)?,
+                split_type: row.get(6)?,
             })
         })?;
-        let mut expenses_list:Vec<Expense> = Vec::new();
+        let mut expenses_list: Vec<Expense> = Vec::new();
         for expense_encap in expenses_query_result {
             expenses_list.push(expense_encap?);
         }
@@ -179,7 +224,10 @@ impl Datamodel for SqliteBackend {
     ) -> std::prelude::v1::Result<(), DataError> {
         let write_lock = self.rw_lock.write().await;
         let connection = self.get_new_connection()?;
-        connection.execute("DELETE FROM GroupMembership WHERE group_id = ?1 AND user_id = ?2", params![group_id, user_id])?;
+        connection.execute(
+            "DELETE FROM GroupMembership WHERE group_id = ?1 AND user_id = ?2",
+            params![group_id, user_id],
+        )?;
         Ok(())
     }
 
@@ -187,8 +235,14 @@ impl Datamodel for SqliteBackend {
         let write_lock = self.rw_lock.write().await;
         let mut connection = self.get_new_connection()?;
         let tx = connection.transaction()?;
-        tx.execute("DELETE FROM GroupMembership WHERE group_id = ?1", params![group_id])?;
-        tx.execute("DELETE FROM ExpenseGroup WHERE group_id = ?1", params![group_id])?;
+        tx.execute(
+            "DELETE FROM GroupMembership WHERE group_id = ?1",
+            params![group_id],
+        )?;
+        tx.execute(
+            "DELETE FROM ExpenseGroup WHERE group_id = ?1",
+            params![group_id],
+        )?;
         tx.commit()?;
         Ok(())
     }
@@ -217,14 +271,15 @@ impl Datamodel for SqliteBackend {
     ) -> std::prelude::v1::Result<Vec<GroupMembership>, DataError> {
         let read_lock = self.rw_lock.read().await;
         let connection = self.get_new_connection()?;
-        let mut membership_query = connection.prepare("SELECT group_id FROM GroupMembership WHERE user_id = ?")?;
+        let mut membership_query =
+            connection.prepare("SELECT group_id FROM GroupMembership WHERE user_id = ?")?;
         let membership_query_result = membership_query.query_map([user_id], |row| {
             Ok(GroupMembership {
                 group_id: row.get(0)?,
                 user_id: row.get(1)?,
             })
         })?;
-        let mut membership_list:Vec<GroupMembership> = Vec::new();
+        let mut membership_list: Vec<GroupMembership> = Vec::new();
         for member_encap in membership_query_result {
             membership_list.push(member_encap?);
         }
@@ -244,7 +299,9 @@ impl From<rusqlite::Error> for DataError {
         match value {
             rusqlite::Error::SqliteFailure(_, _) => DataError::DatabaseError,
             rusqlite::Error::SqliteSingleThreadedMode => DataError::DatabaseError,
-            rusqlite::Error::FromSqlConversionFailure(_, _, _) => DataError::FromSqlConversionFailure,
+            rusqlite::Error::FromSqlConversionFailure(_, _, _) => {
+                DataError::FromSqlConversionFailure
+            }
             rusqlite::Error::IntegralValueOutOfRange(_, _) => DataError::IntegralValueOutOfRange,
             rusqlite::Error::Utf8Error(_) => DataError::Utf8Error,
             rusqlite::Error::NulError(_) => DataError::NulError,

@@ -17,6 +17,12 @@ If not, see <https://www.gnu.org/licenses/>.
 pub type UserId = String;
 pub type GroupId = u32;
 
+pub enum SplitType {
+    Equal,
+    Percent,
+    Amount,
+}
+
 #[derive(Debug, Clone)]
 pub struct User {
     pub user_id: UserId,
@@ -46,6 +52,14 @@ pub struct Expense {
     pub amount: u32,
     pub title: String,
     pub description: String,
+    pub split_type: u32
+}
+
+#[derive(Debug, Clone)]
+pub struct UserExpenses {
+    pub user_id: UserId,
+    pub expenses_id: u32,
+    pub split: u32,
 }
 
 impl User {
@@ -65,6 +79,29 @@ impl Group {
             name,
             description,
             created_by,
+        }
+    }
+}
+
+impl TryFrom<u32> for SplitType {
+    type Error = DataError;
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(SplitType::Equal),
+            1 => Ok(SplitType::Percent),
+            2 => Ok(SplitType::Amount),
+            _ => Err(DataError::InvalidColumnType),
+        }
+    }
+}
+
+impl TryInto<u32> for SplitType {
+    type Error = DataError;
+    fn try_into(self) -> Result<u32, Self::Error> {
+        match self {
+            SplitType::Equal => Ok(0),
+            SplitType::Percent => Ok(1),
+            SplitType::Amount => Ok(2),
         }
     }
 }
@@ -89,6 +126,8 @@ pub enum DataError {
     InvalidQuery,
     MultipleStatement,
     InvalidParameterCount,
+    LogicalError,
+    InvalidSplitType,
 }
 
 impl GroupMembership {
@@ -112,6 +151,7 @@ impl Expense {
             amount,
             title,
             description,
+            split_type: SplitType::Equal.try_into().unwrap()
         }
     }
 }
