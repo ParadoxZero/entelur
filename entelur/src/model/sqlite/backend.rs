@@ -36,7 +36,7 @@ impl Datamodel for SqliteBackend {
         let write_lock = self.rw_lock.write().await;
         let connection = self.get_new_connection()?;
         connection.execute(
-            "INSERT INTO User(user_id, username, name) VALUES (?1 ?2 ?3) ",
+            "INSERT INTO User(user_id, username, name) VALUES (?1, ?2, ?3) ",
             (user.user_id, user.username, user.name),
         )?;
         Result::Ok(())
@@ -46,7 +46,7 @@ impl Datamodel for SqliteBackend {
         let write_lock = self.rw_lock.write().await;
         let connection = self.get_new_connection()?;
         connection.execute(
-            "INSERT INTO ExpenseGroup(group_id, name, description, created_by) VALUES (?1 ?2 ?3 ?4) ",
+            "INSERT INTO ExpenseGroup(group_id, name, description, created_by) VALUES (?1, ?2, ?3, ?4) ",
             (group.group_id, group.name, group.description, group.created_by),
         )?;
         Result::Ok(())
@@ -62,7 +62,7 @@ impl Datamodel for SqliteBackend {
         self.ensure_group_exists(&connection, group_id).await?;
         let write_lock = self.rw_lock.write().await;
         connection.execute(
-            "INSERT INTO GroupMembership(user_id, group_id) VALUES (?1 ?2) ",
+            "INSERT INTO GroupMembership(user_id, group_id) VALUES (?1, ?2) ",
             (user_id, group_id)
         )?;
 
@@ -74,7 +74,7 @@ impl Datamodel for SqliteBackend {
         self.ensure_group_exists(&connection, expense.group).await?;
         let write_lock = self.rw_lock.write().await;
         connection.execute(
-            "INSERT INTO Expense(added_by, group, amount, title, description) VALUES (?1 ?2 ?3 ?4 ?5) ",
+            "INSERT INTO Expense(added_by, group, amount, title, description) VALUES (?1, ?2, ?3, ?4, ?5) ",
             (expense.added_by, expense.group, expense.amount, expense.title, expense.description),
         )?;
 

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use teloxide::{
     dispatching::{
         dialogue::{self, InMemStorage},
@@ -8,7 +10,9 @@ use teloxide::{
     utils::command::{self, BotCommands},
 };
 
-use super::state::State;
+use crate::model::{datamodel::{Datamodel, User}, sqlite::backend::{self, SqliteBackend}};
+
+use super::state::{State, UserData};
 
 type BotDialogue = Dialogue<State, InMemStorage<State>>;
 type HandlerResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
@@ -22,7 +26,7 @@ pub fn user_schemas()-> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 
 pub fn user_callback_schema() -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'static>> {
     use dptree::case;
 
-    case![State::ConfirmUser { user_name }].endpoint(confirm_user)
+    case![State::ConfirmUser { data }].endpoint(confirm_user)
 }
 
 async fn register_name(bot: Bot, msg: Message, dialogue: BotDialogue) -> HandlerResult {
@@ -49,7 +53,10 @@ async fn register_name(bot: Bot, msg: Message, dialogue: BotDialogue) -> Handler
 
     dialogue
         .update(State::ConfirmUser {
-            user_name: user_name.to_string(),
+            data: UserData {
+                name: name.to_string(),
+                username: user_name.to_string(),
+            },
         })
         .await?;
     Ok(())
@@ -58,8 +65,9 @@ async fn register_name(bot: Bot, msg: Message, dialogue: BotDialogue) -> Handler
 async fn confirm_user(
     bot: Bot,
     dialogue: BotDialogue,
-    user_name: String,
+    data: UserData,
     query: CallbackQuery,
+    backend: Arc<SqliteBackend>
 ) -> HandlerResult {
     if let Some(option) = query.data {
         match option.as_str() {
@@ -71,7 +79,21 @@ async fn confirm_user(
             "Accept" => {
                 bot.send_message(dialogue.chat_id(), "Thank you for confirming your details.")
                     .await?;
-                dialogue.update(State::Start).await?;
+                let user = User {
+                    name: data.username,
+                    user_id: dialogue.chat_id().to_string(),
+                    username: data.name
+                };
+                match backend.as_ref().add_user(user).await {
+                    Ok(_) => {
+                        dialogue.update(State::Start).await?;
+                        bot.send_message(dialogue.chat_id(), "Successfully registered")
+                        .await?;
+                    },
+                    Err(e) => {
+                        bot.send_message(dialogue.chat_id(), format!("Failed to register.")).await?;
+                    }
+                }
             }
             "Cancel" => {
                 bot.send_message(dialogue.chat_id(), "Canceled registration.")

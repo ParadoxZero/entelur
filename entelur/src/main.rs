@@ -75,9 +75,8 @@ async fn main() {
 
     backend.migrate_database().await.expect("Failed to migrate database");
 
-    let datamodel = Arc::new(backend);
     Dispatcher::builder(bot, state_machine::schema())
-        .dependencies(dptree::deps![InMemStorage::<State>::new()])
+        .dependencies(dptree::deps![InMemStorage::<State>::new(), Arc::new(backend)])
         .enable_ctrlc_handler()
         .build()
         .dispatch()
