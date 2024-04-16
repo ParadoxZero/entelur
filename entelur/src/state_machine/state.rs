@@ -14,6 +14,8 @@ You should have received a copy of the GNU General Public License along with Foo
 If not, see <https://www.gnu.org/licenses/>.
 */
 
+use crate::model::datamodel;
+
 #[derive(Clone, Default)]
 pub struct UserData {
     pub(crate) username: String,
@@ -31,7 +33,12 @@ pub enum State {
         data: UserData
     },
     CreateGroup,
-    RecieveGroupName,
+    RecieveGroupDescription {
+        group: datamodel::Group
+    },
+    ConfirmGroup {
+        group: datamodel::Group
+    },
     RecieveUserToAdd,
     ModifyGroup,
     RecieveGroupNameToModify,

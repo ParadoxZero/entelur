@@ -58,7 +58,7 @@ async fn register_name(bot: Bot, msg: Message, dialogue: BotDialogue) -> Handler
     };
 
     let options =
-        ["Accept", "Edit", "Cancel"].map(|option| InlineKeyboardButton::callback(option, option));
+        ["Confirm", "Edit", "Cancel"].map(|option| InlineKeyboardButton::callback(option, option));
 
     bot.send_message(
         msg.chat.id,
@@ -107,7 +107,7 @@ async fn confirm_user(
                         .await?;
                     },
                     Err(e) => {
-                        bot.send_message(dialogue.chat_id(), format!("Failed to register.")).await?;
+                        bot.send_message(dialogue.chat_id(), format!("Failed to register. Please Try again.")).await?;
                     }
                 }
             }

@@ -100,7 +100,7 @@ async fn help(bot: Bot, msg: Message) -> HandlerResult {
 
 async fn cancel(bot: Bot, msg: Message, dialogue: BotDialogue) -> HandlerResult {
     dialogue.update(State::Start).await?;
-    bot.send_message(msg.chat.id, "Reset to start").await?;
+    bot.send_message(msg.chat.id, "Reset successful").await?;
     Ok(())
 }
 
