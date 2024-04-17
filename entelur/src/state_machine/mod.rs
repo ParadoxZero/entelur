@@ -120,34 +120,50 @@ async fn register(bot: Bot, msg: Message, dialogue: BotDialogue) -> HandlerResul
     Ok(())
 }
 
-async fn create_group(bot: Bot, msg: Message) -> HandlerResult {
+async fn create_group(bot: Bot, msg: Message, dialogue: BotDialogue) -> HandlerResult {
+    bot.send_message(msg.chat.id, "Please enter a name for the group.")
+        .await?;
+    dialogue.update(State::CreateGroup).await?;
     Ok(())
 }
 
 async fn modify_group(bot: Bot, msg: Message) -> HandlerResult {
+    to_do_message(&bot, msg.chat.id).await?;
     Ok(())
 }
 
 async fn add_expense(bot: Bot, msg: Message) -> HandlerResult {
+    to_do_message(&bot, msg.chat.id).await?;
     Ok(())
 }
 
 async fn show_pending(bot: Bot, msg: Message) -> HandlerResult {
+    to_do_message(&bot, msg.chat.id).await?;
     Ok(())
 }
 
 async fn settle(bot: Bot, msg: Message) -> HandlerResult {
+    to_do_message(&bot, msg.chat.id).await?;
     Ok(())
 }
 
 async fn show_summary(bot: Bot, msg: Message) -> HandlerResult {
+    to_do_message(&bot, msg.chat.id).await?;
     Ok(())
 }
 
 async fn show_statement(bot: Bot, msg: Message) -> HandlerResult {
+    to_do_message(&bot, msg.chat.id).await?;
     Ok(())
 }
 
+async fn to_do_message(bot: &Bot, id: ChatId) -> HandlerResult {
+    bot.send_message(
+        id,
+        "This command is not suported yet"
+    ).await?;
+    Ok(())
+}
 /*
 For reference -
 
