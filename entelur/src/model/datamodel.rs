@@ -14,6 +14,8 @@ You should have received a copy of the GNU General Public License along with Foo
 If not, see <https://www.gnu.org/licenses/>.
 */
 
+use super::DataError;
+
 pub type UserId = String;
 pub type GroupId = u32;
 
@@ -104,30 +106,6 @@ impl TryInto<u32> for SplitType {
             SplitType::Amount => Ok(2),
         }
     }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum DataError {
-    UnknownError,
-    DatabaseError,
-    ConnectionError,
-    FromSqlConversionFailure,
-    IntegralValueOutOfRange,
-    Utf8Error,
-    NulError,
-    InvalidParameterName,
-    ExecuteReturnedResults,
-    QueryReturnedNoRows,
-    InvalidColumnIndex,
-    InvalidColumnName,
-    InvalidColumnType,
-    StatementChangedRows,
-    ToSqlConversionFailure,
-    InvalidQuery,
-    MultipleStatement,
-    InvalidParameterCount,
-    LogicalError,
-    InvalidSplitType,
 }
 
 impl GroupMembership {

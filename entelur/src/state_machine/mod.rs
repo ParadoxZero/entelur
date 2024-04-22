@@ -2,21 +2,23 @@
 This file is part of Entelur (https://github.com/ParadoxZero/entelur/).
 Copyright (c) 2024 Sidhin S Thomas.
 
-Entelur is free software: you can redistribute it and/or modify it under the terms of the 
-GNU General Public License as published by the Free Software Foundation, either version 3 
+Entelur is free software: you can redistribute it and/or modify it under the terms of the
+GNU General Public License as published by the Free Software Foundation, either version 3
 of the License, or (at your option) any later version.
 
-Entelur is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; 
-without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
+Entelur is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 See the GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License along with Foobar. 
+You should have received a copy of the GNU General Public License along with Foobar.
 If not, see <https://www.gnu.org/licenses/>.
 */
 
 pub mod group;
 pub mod state;
 pub mod user;
+
+use std::{clone, sync::Arc};
 
 use teloxide::{
     dispatching::{
@@ -31,7 +33,17 @@ use teloxide::{
 
 use state::State;
 
-use crate::state_machine::user::{user_callback_schema, user_schemas};
+use crate::{
+    model::{
+        datamodel::{Datamodel, Group},
+        sqlite::backend::{self, SqliteBackend},
+        DataError,
+    },
+    state_machine::{
+        group::{create_group_callback_schema, create_group_schema},
+        user::{user_callback_schema, user_schemas},
+    },
+};
 
 type BotDialogue = Dialogue<State, InMemStorage<State>>;
 type HandlerResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
@@ -50,8 +62,10 @@ enum Command {
     Register,
     #[command(description = "Create a group")]
     CreateGroup,
-    #[command(description = "ModifyGroup")]
+    #[command(description = "Modify a Group")]
     ModifyGroup,
+    #[command(description = "Add user to Group")]
+    AddUser,
     #[command(description = "Add Expense")]
     AddExpense,
     #[command(description = "Show pending settlements")]
@@ -74,6 +88,7 @@ pub fn schema() -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'stat
                 .branch(case![Command::Register].endpoint(register))
                 .branch(case![Command::CreateGroup].endpoint(create_group))
                 .branch(case![Command::ModifyGroup].endpoint(modify_group))
+                .branch(case![Command::AddUser].endpoint(add_user))
                 .branch(case![Command::AddExpense].endpoint(add_expense))
                 .branch(case![Command::ShowPending].endpoint(show_pending))
                 .branch(case![Command::Settle].endpoint(settle))
@@ -86,10 +101,13 @@ pub fn schema() -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'stat
         .branch(
             Update::filter_message()
                 .branch(command_handler)
-                .branch(user_schemas())
-                .branch(endpoint(invalid_state)),
+                .branch(user_schemas().chain(create_group_schema())),
         )
-        .branch(Update::filter_callback_query().branch(user_callback_schema()))
+        .branch(
+            Update::filter_callback_query()
+                .branch(user_callback_schema().chain(create_group_callback_schema())),
+        )
+        .branch(endpoint(invalid_state))
 }
 
 async fn help(bot: Bot, msg: Message) -> HandlerResult {
@@ -107,7 +125,7 @@ async fn cancel(bot: Bot, msg: Message, dialogue: BotDialogue) -> HandlerResult 
 async fn invalid_state(bot: Bot, msg: Message) -> HandlerResult {
     bot.send_message(
         msg.chat.id,
-        "Invalid input. please try again. Use /cancel to go back to main menu.",
+        "Invalid state. please try again. Use /cancel to go back to main menu.",
     )
     .await?;
     Ok(())
@@ -129,6 +147,43 @@ async fn create_group(bot: Bot, msg: Message, dialogue: BotDialogue) -> HandlerR
 
 async fn modify_group(bot: Bot, msg: Message) -> HandlerResult {
     to_do_message(&bot, msg.chat.id).await?;
+    Ok(())
+}
+
+async fn add_user(
+    bot: Bot,
+    msg: Message,
+    backend: Arc<SqliteBackend>,
+    dialogue: BotDialogue,
+) -> HandlerResult {
+    bot.send_message(msg.chat.id, "Please select a group.")
+        .await?;
+    let Ok(memberships) = backend
+        .as_ref()
+        .get_membership(msg.chat.id.to_string())
+        .await
+    else {
+        bot.send_message(msg.chat.id, format!("Please select a group."))
+            .await?;
+        return Ok(());
+    };
+
+    let mut groups: Vec<Group> = Vec::new();
+
+    for membership in memberships {
+        let Ok(group) = backend.get_group(membership.group_id).await else {
+            continue;
+        };
+        groups.push(group);
+    }
+
+    let keyboard_buttons = groups
+        .iter()
+        .map(|g| InlineKeyboardButton::callback(g.name.to_string(), g.group_id.to_string()));
+    bot.send_message(msg.chat.id, "Please select a group.")
+        .reply_markup(InlineKeyboardMarkup::new([keyboard_buttons]))
+        .await?;
+    dialogue.update(State::RecieveGroupToAddUser).await?;
     Ok(())
 }
 
@@ -158,11 +213,15 @@ async fn show_statement(bot: Bot, msg: Message) -> HandlerResult {
 }
 
 async fn to_do_message(bot: &Bot, id: ChatId) -> HandlerResult {
-    bot.send_message(
-        id,
-        "This command is not suported yet"
-    ).await?;
+    bot.send_message(id, "This command is not suported yet")
+        .await?;
     Ok(())
+}
+
+impl From<DataError> for () {
+    fn from(value: DataError) -> Self {
+        ()
+    }
 }
 /*
 For reference -

@@ -15,8 +15,9 @@ If not, see <https://www.gnu.org/licenses/>.
 */
 
 use crate::{
+    model::DataError,
     model::datamodel::{
-        DataError, Datamodel, Expense, Group, GroupId, GroupMembership, SplitType, User, UserId
+    Datamodel, Expense, Group, GroupId, GroupMembership, SplitType, User, UserId
     },
     DbBackend,
 };
@@ -92,8 +93,14 @@ impl Datamodel for SqliteBackend {
         let write_lock = self.rw_lock.write().await;
         let connection = self.get_new_connection()?;
         connection.execute(
-            "INSERT INTO ExpenseGroup(group_id, name, description, created_by) VALUES (?1, ?2, ?3, ?4) ",
-            (group.group_id, group.name, group.description, group.created_by),
+            "INSERT INTO EXPENSE_GROUP(name, description, created_by) VALUES (?1, ?2, ?3) ",
+            (group.name, group.description, group.created_by.to_owned()),
+        )?;
+        let group_id = connection.query_row("select last_insert_rowid()", [], |row| {
+            row.get::<usize,usize>(0)      })?;
+        connection.execute(
+            "INSERT INTO GROUP_MEMBERSHIP(user_id, group_id) VALUES (?1, ?2) ",
+            params![group_id, group.created_by.to_owned()],
         )?;
         Result::Ok(())
     }
@@ -108,7 +115,7 @@ impl Datamodel for SqliteBackend {
         self.ensure_group_exists(&connection, group_id).await?;
         let write_lock = self.rw_lock.write().await;
         connection.execute(
-            "INSERT INTO GroupMembership(user_id, group_id) VALUES (?1, ?2) ",
+            "INSERT INTO GROUP_MEMBERSHIP(user_id, group_id) VALUES (?1, ?2) ",
             (user_id, group_id),
         )?;
 
@@ -179,7 +186,7 @@ impl Datamodel for SqliteBackend {
     async fn get_group_members(&self, group_id: GroupId) -> Result<Vec<User>, DataError> {
         let read_lock = self.rw_lock.read().await;
         let connection = self.get_new_connection()?;
-        let mut members_query = connection.prepare("SELECT user_id, username, name FROM User WHERE user_id IN (SELECT user_id FROM GroupMembership WHERE group_id = ?)")?;
+        let mut members_query = connection.prepare("SELECT user_id, username, name FROM User WHERE user_id IN (SELECT user_id FROM GROUP_MEMBERSHIP WHERE group_id = ?)")?;
         let members_query_result = members_query.query_map([group_id], |row| {
             Ok(User {
                 user_id: row.get(0)?,
@@ -225,7 +232,7 @@ impl Datamodel for SqliteBackend {
         let write_lock = self.rw_lock.write().await;
         let connection = self.get_new_connection()?;
         connection.execute(
-            "DELETE FROM GroupMembership WHERE group_id = ?1 AND user_id = ?2",
+            "DELETE FROM GROUP_MEMBERSHIP WHERE group_id = ?1 AND user_id = ?2",
             params![group_id, user_id],
         )?;
         Ok(())
@@ -236,7 +243,7 @@ impl Datamodel for SqliteBackend {
         let mut connection = self.get_new_connection()?;
         let tx = connection.transaction()?;
         tx.execute(
-            "DELETE FROM GroupMembership WHERE group_id = ?1",
+            "DELETE FROM GROUP_MEMBERSHIP WHERE group_id = ?1",
             params![group_id],
         )?;
         tx.execute(
@@ -268,11 +275,11 @@ impl Datamodel for SqliteBackend {
     async fn get_membership(
         &self,
         user_id: UserId,
-    ) -> std::prelude::v1::Result<Vec<GroupMembership>, DataError> {
+    ) -> Result<Vec<GroupMembership>, DataError> {
         let read_lock = self.rw_lock.read().await;
         let connection = self.get_new_connection()?;
         let mut membership_query =
-            connection.prepare("SELECT group_id FROM GroupMembership WHERE user_id = ?")?;
+            connection.prepare("SELECT group_id FROM GROUP_MEMBERSHIP WHERE user_id = ?")?;
         let membership_query_result = membership_query.query_map([user_id], |row| {
             Ok(GroupMembership {
                 group_id: row.get(0)?,

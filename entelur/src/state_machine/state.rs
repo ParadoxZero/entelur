@@ -39,7 +39,10 @@ pub enum State {
     ConfirmGroup {
         group: datamodel::Group
     },
-    RecieveUserToAdd,
+    RecieveGroupToAddUser,
+    RecieveUserToAdd {
+        group: datamodel::Group
+    },
     ModifyGroup,
     RecieveGroupNameToModify,
     RecieveModifyGroupAction,
@@ -53,3 +56,4 @@ pub enum State {
     RecieveAddExpenseAmountEqualSplit,
     RecieveAddExpenseAmountCustomSplit,
 }
+

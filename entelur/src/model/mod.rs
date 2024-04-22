@@ -17,3 +17,27 @@ If not, see <https://www.gnu.org/licenses/>.
 pub mod datamodel;
 pub mod migrations;
 pub mod sqlite;
+
+#[derive(Debug, Clone, Copy)]
+pub enum DataError {
+    UnknownError,
+    DatabaseError,
+    ConnectionError,
+    FromSqlConversionFailure,
+    IntegralValueOutOfRange,
+    Utf8Error,
+    NulError,
+    InvalidParameterName,
+    ExecuteReturnedResults,
+    QueryReturnedNoRows,
+    InvalidColumnIndex,
+    InvalidColumnName,
+    InvalidColumnType,
+    StatementChangedRows,
+    ToSqlConversionFailure,
+    InvalidQuery,
+    MultipleStatement,
+    InvalidParameterCount,
+    LogicalError,
+    InvalidSplitType,
+}

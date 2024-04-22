@@ -14,7 +14,7 @@ You should have received a copy of the GNU General Public License along with Foo
 If not, see <https://www.gnu.org/licenses/>.
 */
 
-use std::{fmt::Debug, sync::Arc};
+use std::{error::Error, fmt::Debug, sync::Arc};
 
 use teloxide::{
     dispatching::{
@@ -22,12 +22,13 @@ use teloxide::{
         UpdateHandler,
     },
     prelude::*,
-    types::{InlineKeyboardButton, InlineKeyboardMarkup},
+    types::{InlineKeyboardButton, InlineKeyboardMarkup, True},
     utils::command::{self, BotCommands},
 };
+use tokio::runtime::Handle;
 
 use crate::model::{
-    datamodel::{Datamodel, Group},
+    datamodel::{Datamodel, Group, GroupId},
     sqlite::backend::SqliteBackend,
 };
 
@@ -35,19 +36,35 @@ use super::state::State;
 
 type BotDialogue = Dialogue<State, InMemStorage<State>>;
 type HandlerResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
+type TelHandler<'a> = Handler<
+    'a,
+    DependencyMap,
+    Result<(), Box<dyn Error + Sync + Send>>,
+    teloxide::dispatching::DpHandlerDescription,
+>;
 
 pub fn create_group_schema() -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'static>> {
     use dptree::case;
 
-    case![State::CreateGroup]
-        .endpoint(create_group)
+    dptree::entry()
+        .branch(case![State::CreateGroup].endpoint(create_group))
         .branch(case![State::RecieveGroupDescription { group }].endpoint(recieve_group_description))
 }
 
 pub fn create_group_callback_schema(
 ) -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'static>> {
     use dptree::case;
-    case![State::ConfirmGroup { group }].endpoint(confirm_group)
+
+    dptree::entry()
+        .branch(case![State::ConfirmGroup { group }].endpoint(confirm_group))
+        .branch(case![State::RecieveGroupToAddUser].endpoint(recieve_group_user_add))
+}
+
+async fn check_group_state(dialog: BotDialogue) -> Option<State> {
+    let Ok(state) = dialog.get().await else {
+        return None;
+    };
+    state
 }
 
 async fn create_group(bot: Bot, msg: Message, dialogue: BotDialogue) -> HandlerResult {
@@ -90,6 +107,7 @@ async fn recieve_group_description(
                 group.name, group.description
             ),
         )
+        .reply_markup(InlineKeyboardMarkup::new([options]))
         .await?;
         dialogue.update(State::ConfirmGroup { group }).await?;
     } else {
@@ -117,8 +135,6 @@ async fn confirm_group(
 
     match option.as_str() {
         "Confirm" => {
-            bot.send_message(dialogue.chat_id(), "Group created successfully.")
-                .await?;
             match backend.as_ref().add_group(group).await {
                 Ok(_) => {
                     dialogue.update(State::Start).await?;
@@ -126,6 +142,7 @@ async fn confirm_group(
                         .await?;
                 }
                 Err(e) => {
+                    dbg!(e);
                     bot.send_message(
                         dialogue.chat_id(),
                         format!("Error creating group. Please try again later."),
@@ -133,7 +150,7 @@ async fn confirm_group(
                     .await?;
                 }
             }
-        },
+        }
         "Edit" => {
             dialogue.update(State::CreateGroup).await?;
             bot.send_message(dialogue.chat_id(), "Please enter the name of the group.")
@@ -141,10 +158,49 @@ async fn confirm_group(
         }
         "Cancel" => {
             dialogue.update(State::Start).await?;
-            bot.send_message(dialogue.chat_id(), "Canceled group creation.").await?;
+            bot.send_message(dialogue.chat_id(), "Canceled group creation.")
+                .await?;
         }
         _ => {}
     };
+
+    Ok(())
+}
+
+async fn recieve_group_user_add(
+    bot: Bot,
+    dialogue: BotDialogue,
+    group: Group,
+    q: CallbackQuery,
+    backend: Arc<SqliteBackend>,
+) -> HandlerResult {
+    let Some(group_id) = q.data else {
+        bot.send_message(
+            dialogue.chat_id(),
+            "Didn't find group in response. Please try again",
+        )
+        .await?;
+        dialogue.update(State::Start).await?;
+        return Ok(());
+    };
+
+    let group_id: GroupId = group_id.parse()?;
+    let Ok(group) = backend.get_group(group_id).await else {
+        bot.send_message(
+            dialogue.chat_id(),
+            "Didn't find group in database. Please try again",
+        )
+        .await?;
+        dialogue.update(State::Start).await?;
+        return Ok(());
+    };
+
+    bot.send_message(
+        dialogue.chat_id(),
+        "Please select a user to add to the group.",
+    )
+    .await?;
+    dialogue.update(State::RecieveUserToAdd { group }).await?;
 
     Ok(())
 }
