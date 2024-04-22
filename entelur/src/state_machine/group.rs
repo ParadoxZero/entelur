@@ -43,7 +43,7 @@ type TelHandler<'a> = Handler<
     teloxide::dispatching::DpHandlerDescription,
 >;
 
-pub fn create_group_schema() -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'static>> {
+pub fn group_schema() -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'static>> {
     use dptree::case;
 
     dptree::entry()
@@ -51,20 +51,13 @@ pub fn create_group_schema() -> UpdateHandler<Box<dyn std::error::Error + Send +
         .branch(case![State::RecieveGroupDescription { group }].endpoint(recieve_group_description))
 }
 
-pub fn create_group_callback_schema(
+pub fn group_callback_schema(
 ) -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'static>> {
     use dptree::case;
 
     dptree::entry()
         .branch(case![State::ConfirmGroup { group }].endpoint(confirm_group))
         .branch(case![State::RecieveGroupToAddUser].endpoint(recieve_group_user_add))
-}
-
-async fn check_group_state(dialog: BotDialogue) -> Option<State> {
-    let Ok(state) = dialog.get().await else {
-        return None;
-    };
-    state
 }
 
 async fn create_group(bot: Bot, msg: Message, dialogue: BotDialogue) -> HandlerResult {

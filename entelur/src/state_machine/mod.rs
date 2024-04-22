@@ -40,7 +40,7 @@ use crate::{
         DataError,
     },
     state_machine::{
-        group::{create_group_callback_schema, create_group_schema},
+        group::{group_callback_schema, group_schema},
         user::{user_callback_schema, user_schemas},
     },
 };
@@ -101,11 +101,11 @@ pub fn schema() -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'stat
         .branch(
             Update::filter_message()
                 .branch(command_handler)
-                .branch(user_schemas().chain(create_group_schema())),
+                .branch(user_schemas().chain(group_schema())),
         )
         .branch(
             Update::filter_callback_query()
-                .branch(user_callback_schema().chain(create_group_callback_schema())),
+                .branch(user_callback_schema().chain(group_callback_schema())),
         )
         .branch(endpoint(invalid_state))
 }
